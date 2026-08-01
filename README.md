@@ -25,6 +25,11 @@ file, and then generates text live from any prompt you give it.
 
 ## Quick start
 
+Needs Python 3.8+ and one library (numpy). Run every command **from inside
+this folder**. On Mac/Linux type `python3` and `pip3` wherever you see
+`python` and `pip`; on Windows, if `python` opens the Microsoft Store, use
+`py` instead.
+
 ```bash
 pip install numpy
 
@@ -35,13 +40,36 @@ python test_model.py
 python train.py --dataset shakespeare
 
 # 3. talk to it
-python generate.py --model checkpoints/shakespeare.npz --prompt "ROMEO:" 
+python generate.py --model checkpoints/shakespeare.npz --prompt "ROMEO:"
 python generate.py --model checkpoints/shakespeare.npz --interactive
 ```
 
 While training you'll watch the loss fall and see live samples evolve from
 random noise → words → sentences. That's learning happening in front of you.
-You can press ctrl-c any time; a checkpoint is saved every 500 steps.
+You can press ctrl-c any time — it saves its progress before exiting (and
+auto-saves every 500 steps during the run).
+
+### First time on Windows?
+
+1. Install Python from https://www.python.org/downloads — and **check the
+   box "Add python.exe to PATH"** on the installer's first screen.
+2. Get this code: green **Code** button above → **Download ZIP** → right-click
+   → Extract All.
+3. Open a terminal in the extracted folder: in File Explorer, click the
+   address bar, type `cmd`, press Enter.
+4. Run the Quick start commands. (Windows paths use `\`, e.g.
+   `checkpoints\shakespeare.npz` — both usually work here.)
+
+### First time on a Mac?
+
+1. Open Terminal (Cmd+Space, type "Terminal").
+2. Check `python3 --version` — if it's missing or older than 3.8, install
+   from https://www.python.org/downloads.
+3. Download the ZIP as above, unzip, then `cd` into it (e.g.
+   `cd ~/Downloads/AI-main`) and run the Quick start with `python3`/`pip3`.
+
+Training makes your CPU work hard — fans are normal, laptops should be
+plugged in, and the computer must not go to sleep (screen off is fine).
 
 ## Teach it to code
 
@@ -76,6 +104,13 @@ Continue training an existing brain instead of starting over:
 ```bash
 python train.py --dataset shakespeare --resume checkpoints/shakespeare.npz --steps 3000
 ```
+
+Two things to know about `--resume`: the size flags (`--layers`, `--emb`,
+`--context`) are ignored — a saved brain keeps its shape forever. And a
+brain's alphabet is fixed the first time it's trained, so if you resume on
+text full of characters it has never seen, those get skipped (the trainer
+warns you). For very different text, train a fresh brain on a combined file
+instead.
 
 ## What's in the files
 

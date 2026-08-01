@@ -23,6 +23,8 @@ chain rule for exactly the math its forward() did.
 """
 
 import json
+import os
+
 import numpy as np
 
 rng = np.random.default_rng(1234)
@@ -129,7 +131,9 @@ class CausalSelfAttention:
         k = k.reshape(B, T, H, hs).transpose(0, 2, 1, 3)
         v = v.reshape(B, T, H, hs).transpose(0, 2, 1, 3)
 
-        att = q @ k.transpose(0, 1, 3, 2) / np.sqrt(hs)   # (B,H,T,T) scores
+        # hs ** 0.5 (a plain Python float) rather than np.sqrt(hs): numpy 2
+        # would silently promote every float32 array downstream to float64
+        att = q @ k.transpose(0, 1, 3, 2) / (hs ** 0.5)   # (B,H,T,T) scores
         att = np.where(self.mask[:T, :T], att, -1e9)      # block the future
         att = att - att.max(-1, keepdims=True)            # numerical safety
         e = np.exp(att)
@@ -150,7 +154,7 @@ class CausalSelfAttention:
         dv = self.S.transpose(0, 1, 3, 2) @ dy
         # softmax backward (masked spots have S=0, so their gradient is 0)
         datt = self.S * (dS - (dS * self.S).sum(-1, keepdims=True))
-        datt = datt / np.sqrt(hs)
+        datt = datt / (hs ** 0.5)
         dq = datt @ self.k
         dk = datt.transpose(0, 1, 3, 2) @ self.q
 
@@ -239,9 +243,11 @@ class GPT:
         self.targets = targets
         z = logits - logits.max(-1, keepdims=True)
         e = np.exp(z)
-        self.probs = e / e.sum(-1, keepdims=True)
-        flat = self.probs.reshape(B * T, -1)
-        loss = -np.log(flat[np.arange(B * T), targets.reshape(-1)] + 1e-9).mean()
+        se = e.sum(-1, keepdims=True)
+        self.probs = e / se
+        logp = z - np.log(se)          # exact log-softmax — matches backward
+        flat = logp.reshape(B * T, -1)
+        loss = -flat[np.arange(B * T), targets.reshape(-1)].mean()
         return logits, loss
 
     def backward(self):
@@ -319,7 +325,11 @@ class Adam:
 def save_checkpoint(path, model, chars):
     meta = json.dumps({"config": model.cfg.to_dict(), "vocab": chars})
     arrays = {f"p{i}": p for i, (p, _) in enumerate(model.params_and_grads())}
-    np.savez_compressed(path, meta=meta, **arrays)
+    # write to a temp file then swap it in, so an interrupt mid-save can
+    # never destroy the previous good checkpoint
+    tmp = path + ".tmp.npz"
+    np.savez_compressed(tmp, meta=meta, **arrays)
+    os.replace(tmp, path)
 
 
 def load_checkpoint(path):

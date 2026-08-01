@@ -4,7 +4,7 @@ the web, so the AI learns from real-world data instead of a hardcoded string.
 
 Built-in datasets:
   shakespeare  ~1 MB of Shakespeare's plays — learns English style fast
-  code         ~1 MB of real Python source from the official Python standard
+  code         ~500 KB of real Python source from the official Python standard
                library — teaches the model to write Python-shaped code
   url <link>   ANY text page you point it at (e.g. a free Project Gutenberg
                book) becomes a dataset
@@ -59,7 +59,9 @@ def get_dataset(name, url=None):
         raise SystemExit(f"unknown dataset '{name}' — use shakespeare, code, "
                          f"or: python download_data.py url <link> <name>")
 
-    with open(path, "w") as f:
+    # encoding='utf-8' matters: without it, Windows writes in its legacy
+    # locale encoding and crashes on characters like 'Ł' in the code dataset
+    with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     print(f"saved {len(text):,} characters to {path}")
     return path

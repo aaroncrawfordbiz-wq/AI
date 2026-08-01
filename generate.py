@@ -3,7 +3,7 @@ Talk to a trained brain. Loads a checkpoint and generates text from your
 prompt, streaming character by character — the model literally writing live.
 
   python generate.py --model checkpoints/shakespeare.npz --prompt "ROMEO:"
-  python generate.py --model checkpoints/code.npz --prompt "def sort_list(" --tokens 400
+  python generate.py --model checkpoints/code.npz --prompt "def " --tokens 400
   python generate.py --model checkpoints/shakespeare.npz --interactive
 
 Knobs:
@@ -12,19 +12,28 @@ Knobs:
 """
 
 import argparse
+import os
 import sys
+
+# same single-thread speedup as train.py — must happen before numpy loads
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
 
 from model import load_checkpoint
 from tokenizer import CharTokenizer
 
 
 def run(model, tok, prompt, tokens, temperature, top_k):
-    ids = tok.encode(prompt)
-    if len(ids) == 0:
-        ids = tok.encode(" ")
+    known = sum(c in tok.ctoi for c in prompt)
+    if known < len(prompt):
+        print(f"(note: {len(prompt) - known} character(s) of your prompt "
+              f"aren't in this model's alphabet and were ignored)")
+    ids = list(tok.encode(prompt))
+    if not ids:
+        ids = list(tok.encode(" ")) or [0]
     sys.stdout.write(prompt)
     sys.stdout.flush()
-    model.generate(list(ids), tokens, temperature=temperature, top_k=top_k,
+    model.generate(ids, tokens, temperature=temperature, top_k=top_k,
                    stream=lambda i: (sys.stdout.write(tok.decode([i])),
                                      sys.stdout.flush()))
     print()
@@ -42,6 +51,9 @@ def main():
                    help="keep prompting it in a loop")
     args = p.parse_args()
 
+    if not os.path.exists(args.model):
+        raise SystemExit(f"can't find '{args.model}' — train a brain first "
+                         f"(python train.py --dataset shakespeare) or check the path")
     model, chars = load_checkpoint(args.model)
     tok = CharTokenizer(chars)
     print(f"loaded {args.model}: {model.num_params():,} parameters, "

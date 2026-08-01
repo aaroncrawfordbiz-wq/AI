@@ -3,8 +3,8 @@ Train the AI. It saves its brain to a checkpoint file, so you train ONCE and
 then generate from it forever (no more relearning every run).
 
 Quick start:
-  python train.py --dataset shakespeare            # learns English (~5 min)
-  python train.py --dataset code                   # learns Python  (~5 min)
+  python train.py --dataset shakespeare        # learns English (~10-15 min)
+  python train.py --dataset code               # learns Python  (~10-15 min)
   python train.py --data data/mybook.txt --out checkpoints/mybook
 
 Make it smarter (bigger model, longer training — slower but better):
@@ -12,11 +12,19 @@ Make it smarter (bigger model, longer training — slower but better):
 
 Then talk to it:
   python generate.py --model checkpoints/shakespeare.npz --prompt "ROMEO:"
+
+Press ctrl-c any time — progress is saved before exiting.
 """
 
 import argparse
 import os
 import time
+
+# A model this small trains FASTER on one thread: numpy's default
+# multi-threading spends more time coordinating than computing on matrices
+# this size. (Set OMP_NUM_THREADS yourself before running to override.)
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
 
 import numpy as np
 
@@ -25,6 +33,7 @@ from model import GPT, Adam, Config, save_checkpoint, load_checkpoint
 from tokenizer import CharTokenizer
 
 rng = np.random.default_rng(0)
+BASE = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_batch(ids, batch, context):
@@ -72,6 +81,9 @@ def main():
 
     # ---- data ----
     if args.data:
+        if not os.path.exists(args.data):
+            raise SystemExit(f"can't find '{args.data}' — check the path (and "
+                             f"run commands from inside the project folder)")
         path, name = args.data, os.path.splitext(os.path.basename(args.data))[0]
     elif args.dataset:
         path, name = get_dataset(args.dataset), args.dataset
@@ -81,10 +93,23 @@ def main():
 
     # ---- model (fresh, or resumed from a saved brain) ----
     if args.resume:
+        if not os.path.exists(args.resume):
+            raise SystemExit(f"can't find '{args.resume}' — check the path")
         model, chars = load_checkpoint(args.resume)
         tok = CharTokenizer(chars)
-        print(f"resumed {args.resume}")
+        print(f"resumed {args.resume}  (size flags are ignored when resuming "
+              f"— the saved brain keeps its shape)")
+        missing = sorted(set(text) - set(chars))
+        if missing:
+            shown = "".join(missing[:20]) + ("…" if len(missing) > 20 else "")
+            print(f"warning: {len(missing)} character(s) in this text are not "
+                  f"in the saved brain's alphabet and will be SKIPPED: {shown!r}\n"
+                  f"         (a brain's alphabet is fixed the first time it is "
+                  f"trained — for very different text, train a fresh brain)")
     else:
+        if args.emb % args.heads:
+            raise SystemExit(f"--emb must be divisible by --heads "
+                             f"({args.emb} doesn't split into {args.heads} equal heads)")
         tok = CharTokenizer.from_text(text)
         cfg = Config(vocab_size=tok.vocab_size, context=args.context,
                      n_layer=args.layers, n_head=args.heads, n_emb=args.emb)
@@ -95,39 +120,53 @@ def main():
     train_ids, valid_ids = ids[:split], ids[split:]
     ctx = model.cfg.context
 
-    out = args.out or os.path.join("checkpoints", name)
+    # each training example needs context+1 characters; insist on headroom so
+    # both the training and validation splits can always fill a batch
+    if len(valid_ids) < ctx + 2 or len(train_ids) < 20 * (ctx + 2):
+        raise SystemExit(
+            f"'{path}' has only {len(ids):,} usable characters — too short to "
+            f"train with --context {ctx}. Use a file with at least "
+            f"~{25 * (ctx + 2):,} characters, or lower --context.")
+
+    out = args.out or os.path.join(BASE, "checkpoints", name)
     if not out.endswith(".npz"):
         out += ".npz"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
 
-    print(f"data: {len(text):,} chars, vocab {tok.vocab_size} | "
+    print(f"data: {len(ids):,} characters, vocab {tok.vocab_size} | "
           f"model: {model.num_params():,} parameters | "
           f"random-guess loss would be {np.log(tok.vocab_size):.2f}")
 
     # ---- the loop: forward -> loss -> backward -> Adam nudge ----
     opt = Adam()
     t0 = time.time()
-    for step in range(args.steps + 1):
-        x, y = get_batch(train_ids, args.batch, ctx)
-        _, loss = model.forward(x, y)
-        model.backward()
-        opt.step(model.params_and_grads(), lr_at(step, args.steps, args.lr))
+    try:
+        for step in range(args.steps + 1):
+            x, y = get_batch(train_ids, args.batch, ctx)
+            _, loss = model.forward(x, y)
+            model.backward()
+            opt.step(model.params_and_grads(), lr_at(step, args.steps, args.lr))
 
-        if step % 100 == 0:
-            speed = (step + 1) / (time.time() - t0)
-            print(f"step {step:5d}/{args.steps}   train loss {loss:.3f}   "
-                  f"({speed:.1f} steps/s)")
-        if step and step % 500 == 0:
-            vl = val_loss(model, valid_ids, args.batch, ctx)
-            print(f"          validation loss {vl:.3f}  (loss on text it has "
-                  f"never seen — the honest score)")
-            save_checkpoint(out, model, tok.chars)
-            sample = model.generate(tok.encode(text[:ctx]), 150)
-            print(f"          sample: {tok.decode(sample)!r}\n")
+            if step % 100 == 0:
+                speed = (step + 1) / (time.time() - t0)
+                print(f"step {step:5d}/{args.steps}   train loss {loss:.3f}   "
+                      f"({speed:.1f} steps/s)")
+            if step and step % 500 == 0:
+                vl = val_loss(model, valid_ids, args.batch, ctx)
+                print(f"          validation loss {vl:.3f}  (loss on text it has "
+                      f"never seen — the honest score)")
+                save_checkpoint(out, model, tok.chars)
+                seed = list(tok.encode(text[:ctx])) or [0]
+                sample = model.generate(seed, 150)
+                print(f"          sample: {tok.decode(sample)!r}\n")
+    except KeyboardInterrupt:
+        print("\nstopped early — saving what it has learned so far")
 
     save_checkpoint(out, model, tok.chars)
+    hint = next((ln for ln in text[:300].splitlines() if ln.strip()), "the")
+    hint = hint[:20].replace('"', "'")
     print(f"\nbrain saved to {out}")
-    print(f"try it:  python generate.py --model {out} --prompt \"{text[:20]}\"")
+    print(f'try it:  python generate.py --model "{out}" --prompt "{hint}"')
 
 
 if __name__ == "__main__":
