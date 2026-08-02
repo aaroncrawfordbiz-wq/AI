@@ -10,6 +10,10 @@ Quick start:
 Make it smarter (bigger model, longer training — slower but better):
   python train.py --dataset shakespeare --layers 4 --emb 128 --context 128 --steps 8000
 
+Let it run for a fixed amount of time instead of guessing a step count —
+useful for "leave it training overnight" runs:
+  python train.py --dataset everything --layers 8 --emb 384 --heads 8 --context 192 --hours 24
+
 Then talk to it:
   python generate.py --model checkpoints/shakespeare.npz --prompt "ROMEO:"
 
@@ -54,13 +58,13 @@ def val_loss(model, ids, batch, context, rounds=8):
     return total / rounds
 
 
-def lr_at(step, steps, lr_max):
-    """Warm up, then cosine-decay — starts gentle, ends gentle. Standard."""
-    warmup = min(200, steps // 10)
+def lr_at(step, progress_frac, lr_max, warmup=200):
+    """Warm up, then cosine-decay — starts gentle, ends gentle. Standard.
+    progress_frac is 0 at the start of training and 1 at the planned end,
+    measured in whichever unit training is bounded by (steps, or time)."""
     if step < warmup:
         return lr_max * (step + 1) / warmup
-    frac = (step - warmup) / max(1, steps - warmup)
-    return 0.1 * lr_max + 0.45 * lr_max * (1 + np.cos(np.pi * frac))
+    return 0.1 * lr_max + 0.45 * lr_max * (1 + np.cos(np.pi * min(progress_frac, 1.0)))
 
 
 def main():
@@ -71,6 +75,10 @@ def main():
     p.add_argument("--out", help="checkpoint path (default checkpoints/<name>)")
     p.add_argument("--resume", help="checkpoint to continue training from")
     p.add_argument("--steps", type=int, default=3000)
+    p.add_argument("--hours", type=float,
+                   help="train for this many hours instead of a fixed step "
+                        "count (overrides --steps; still checkpoints/samples "
+                        "every 500 steps and every ~10 minutes)")
     p.add_argument("--batch", type=int, default=32)
     p.add_argument("--context", type=int, default=64)
     p.add_argument("--layers", type=int, default=3)
@@ -138,20 +146,42 @@ def main():
           f"random-guess loss would be {np.log(tok.vocab_size):.2f}")
 
     # ---- the loop: forward -> loss -> backward -> Adam nudge ----
+    if args.hours:
+        total_seconds = args.hours * 3600
+        print(f"training for {args.hours:g} hours (ctrl-c stops early; "
+              f"it saves every 500 steps and every ~10 minutes either way)")
     opt = Adam()
     t0 = time.time()
+    last_save = t0
+    step = 0
     try:
-        for step in range(args.steps + 1):
+        while True:
+            elapsed = time.time() - t0
+            if args.hours:
+                if elapsed >= total_seconds:
+                    break
+                progress = elapsed / total_seconds
+            else:
+                if step > args.steps:
+                    break
+                progress = step / max(1, args.steps)
+
             x, y = get_batch(train_ids, args.batch, ctx)
             _, loss = model.forward(x, y)
             model.backward()
-            opt.step(model.params_and_grads(), lr_at(step, args.steps, args.lr))
+            opt.step(model.params_and_grads(), lr_at(step, progress, args.lr))
 
             if step % 100 == 0:
-                speed = (step + 1) / (time.time() - t0)
-                print(f"step {step:5d}/{args.steps}   train loss {loss:.3f}   "
-                      f"({speed:.1f} steps/s)")
-            if step and step % 500 == 0:
+                speed = (step + 1) / max(elapsed, 1e-9)
+                target = f"{args.hours:g}h" if args.hours else args.steps
+                remaining = (f"{(total_seconds - elapsed) / 60:.0f} min left"
+                            if args.hours else f"step {step}/{args.steps}")
+                print(f"step {step:5d} (target {target})   train loss {loss:.3f}   "
+                      f"({speed:.1f} steps/s, {remaining})")
+            due_by_steps = step and step % 500 == 0
+            due_by_time = time.time() - last_save >= 600   # every ~10 min
+            if due_by_steps or (args.hours and due_by_time):
+                last_save = time.time()
                 vl = val_loss(model, valid_ids, args.batch, ctx)
                 print(f"          validation loss {vl:.3f}  (loss on text it has "
                       f"never seen — the honest score)")
@@ -159,6 +189,7 @@ def main():
                 seed = list(tok.encode(text[:ctx])) or [0]
                 sample = model.generate(seed, 150)
                 print(f"          sample: {tok.decode(sample)!r}\n")
+            step += 1
     except KeyboardInterrupt:
         print("\nstopped early — saving what it has learned so far")
 

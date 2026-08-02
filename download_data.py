@@ -12,6 +12,10 @@ Built-in datasets:
                       model learns the shape of all of them (prompt with
                       "def " for Python-mode, "function " for JS-mode, etc).
                       With no language names, uses ALL of them.
+  library             ~9 MB, 18 full public-domain novels — a real English
+                      text library, not just one small play.
+  everything          library + every programming language combined — one
+                      big brain that reads prose AND writes code.
   url <link>          ANY text page you point it at (e.g. a free Project
                       Gutenberg book) becomes a dataset
 
@@ -22,6 +26,8 @@ Usage:
   python download_data.py lang rust
   python download_data.py polyglot python rust go
   python download_data.py polyglot
+  python download_data.py library
+  python download_data.py everything
   python download_data.py url https://www.gutenberg.org/files/11/11-0.txt alice
 """
 
@@ -137,6 +143,30 @@ LANG_FILES = {
     ],
 }
 
+# 18 full public-domain novels (all pre-1929, U.S. public domain), mirrored
+# on GitHub by the GITenberg project as plain text — verified reachable.
+BOOK_URLS = {
+    "warandpeace": "https://raw.githubusercontent.com/GITenberg/War-and-Peace_2600/master/2600.txt",
+    "alice": "https://raw.githubusercontent.com/GITenberg/Alice-s-Adventures-in-Wonderland_11/master/11.txt",
+    "sherlock": "https://raw.githubusercontent.com/GITenberg/The-Adventures-of-Sherlock-Holmes_1661/master/1661.txt",
+    "frankenstein": "https://raw.githubusercontent.com/GITenberg/Frankenstein_84/master/84.txt",
+    "prideandprejudice": "https://raw.githubusercontent.com/GITenberg/Pride-and-Prejudice_1342/master/1342.txt",
+    "greatexpectations": "https://raw.githubusercontent.com/GITenberg/Great-Expectations_1400/master/1400.txt",
+    "dracula": "https://raw.githubusercontent.com/GITenberg/Dracula_345/master/345.txt",
+    "janeeyre": "https://raw.githubusercontent.com/GITenberg/Jane-Eyre_1260/master/1260.txt",
+    "tomsawyer": "https://raw.githubusercontent.com/GITenberg/The-Adventures-of-Tom-Sawyer_74/master/74.txt",
+    "countofmontecristo": "https://raw.githubusercontent.com/GITenberg/The-Count-of-Monte-Cristo_1184/master/1184.txt",
+    "metamorphosis": "https://raw.githubusercontent.com/GITenberg/Metamorphosis_5200/master/5200.txt",
+    "warofworlds": "https://raw.githubusercontent.com/GITenberg/The-War-of-the-Worlds_36/master/36.txt",
+    "picturedorian": "https://raw.githubusercontent.com/GITenberg/The-Picture-of-Dorian-Gray_174/master/174.txt",
+    "iliad": "https://raw.githubusercontent.com/GITenberg/The-Iliad_6130/master/6130.txt",
+    "crimeandpunishment": "https://raw.githubusercontent.com/GITenberg/Crime-and-Punishment_2554/master/2554.txt",
+    "middlemarch": "https://raw.githubusercontent.com/GITenberg/Middlemarch_145/master/145.txt",
+    "peterpan": "https://raw.githubusercontent.com/GITenberg/Peter-Pan_16/master/16.txt",
+    "anneofgreengables": "https://raw.githubusercontent.com/GITenberg/Anne-of-Green-Gables_45/master/45.txt",
+    "secretgarden": "https://raw.githubusercontent.com/GITenberg/The-Secret-Garden_113/master/113.txt",
+}
+
 
 def fetch(url):
     print(f"  downloading {url}")
@@ -164,6 +194,12 @@ def get_dataset(name, url=None):
         text = fetch(SHAKESPEARE_URL)
     elif name == "code":
         text = fetch_language("python")
+    elif name == "library":
+        return get_library()
+    elif name == "everything":
+        return get_everything()
+    elif name == "polyglot":
+        return get_polyglot()
     elif name.startswith("lang_"):
         text = fetch_language(name[len("lang_"):])
     elif url:
@@ -175,6 +211,39 @@ def get_dataset(name, url=None):
 
     # encoding='utf-8' matters: without it, Windows writes in its legacy
     # locale encoding and crashes on characters outside its default codepage
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"saved {len(text):,} characters to {path}")
+    return path
+
+
+def get_library():
+    """Download 18 full novels and concatenate them into one text library —
+    too much text for a model to memorize, so it's forced to generalize."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    path = os.path.join(DATA_DIR, "library.txt")
+    if os.path.exists(path):
+        print(f"already downloaded: {path}")
+        return path
+    parts = [fetch(u) for u in BOOK_URLS.values()]
+    text = "\n\n".join(parts)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"saved {len(text):,} characters ({len(BOOK_URLS)} books) to {path}")
+    return path
+
+
+def get_everything():
+    """The library plus every programming language — one big brain that
+    reads prose and writes code."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    path = os.path.join(DATA_DIR, "everything.txt")
+    if os.path.exists(path):
+        print(f"already downloaded: {path}")
+        return path
+    lib_path = get_library()
+    poly_path = get_polyglot()
+    text = open(lib_path, encoding="utf-8").read() + open(poly_path, encoding="utf-8").read()
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     print(f"saved {len(text):,} characters to {path}")
@@ -226,5 +295,9 @@ if __name__ == "__main__":
             print(f"  {lang}")
     elif cmd == "polyglot":
         get_polyglot(sys.argv[2:] or None)
+    elif cmd == "library":
+        get_library()
+    elif cmd == "everything":
+        get_everything()
     else:
         get_dataset(cmd)

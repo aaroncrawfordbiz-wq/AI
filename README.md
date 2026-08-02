@@ -131,6 +131,42 @@ python train.py --data data/alice.txt
 python train.py --data my_stuff.txt
 ```
 
+## A text library, not just one play
+
+```bash
+python download_data.py library      # 19 full public-domain novels, ~18 MB
+python train.py --data data/library.txt --layers 6 --emb 256 --heads 8 --context 128 --steps 40000
+```
+
+Too much text to memorize forces the model to actually learn language
+patterns instead of parroting pages — the "student vs. parrot" difference.
+
+## Everything at once — text library + all 27 languages, run for a full day
+
+```bash
+python download_data.py everything   # library + every language, ~20 MB
+
+python train.py --data data/everything.txt \
+                 --layers 7 --emb 320 --heads 8 --context 160 \
+                 --hours 24 \
+                 --out checkpoints/big
+```
+
+That's roughly **2x the parameters** of the library recipe above (~8.8
+million vs ~4.8 million), and `--hours 24` means it trains for a full day
+and stops — no step-count guessing. It checkpoints every 500 steps AND every
+~10 minutes either way, so it's always safe to interrupt, and the printed
+`steps/s` adapts to however fast YOUR PC actually runs it — the flag does
+the math for you no matter the hardware.
+
+After a day on this much varied text, expect a real step up: longer
+coherent stretches, better grammar, and it switches between prose and any
+of the 27 languages depending on how you start the prompt. Still the same
+honest ceiling as ever, just further along it: genuinely smarter at
+*sounding like* English and *sounding like* code, not a program that
+executes or a mind that reasons — that gap is closed by scale (GPU
+datacenters, not more hours on one CPU), not by dataset size alone.
+
 ## Make it smarter
 
 Every knob is a flag. Bigger + longer = smarter (and slower):
