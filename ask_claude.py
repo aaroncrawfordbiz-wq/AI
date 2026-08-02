@@ -17,6 +17,15 @@ environment that built this file did not have; see the note below):
 Usage:
   python ask_claude.py "what is bitcoin trading at right now"     # one question
   python ask_claude.py --chat                                     # real back-and-forth chat
+  python ask_claude.py --chat --no-thinking                       # hide the [thinking] section
+
+By default every answer is shown like this (a REAL summary of Claude's
+actual reasoning, from the API's real extended-thinking feature -- never
+a fabricated placeholder):
+  you> hi
+  claude> [thinking] The user just greeted me casually. I should greet
+  them back warmly and ask how I can help. [thought]
+  hi! how are you? how can I help you today?
 
 IMPORTANT — this was built and unit-tested in a locked-down sandbox that
 blocks outbound network calls to api.anthropic.com, so the live call path
@@ -54,10 +63,30 @@ def _extract_text(response):
     return "".join(b.text for b in response.content if b.type == "text")
 
 
-def ask(question, model=MODEL, max_tokens=2048):
+def _extract_thinking(response):
+    """Real thinking blocks -- Claude's actual reasoning, summarized into
+    readable text (display: 'summarized'), not invented or simulated."""
+    return "\n".join(b.thinking for b in response.content
+                     if b.type == "thinking" and b.thinking)
+
+
+def _format_reply(response, show_thinking):
+    """[thinking] ... [thought] <answer> -- the format you asked for. The
+    thinking text is Claude's REAL reasoning (a summary of it, since the raw
+    chain of thought is never exposed by the API), not a fake placeholder."""
+    out = []
+    if show_thinking:
+        thinking = _extract_thinking(response)
+        out.append(f"[thinking] {thinking or '...'} [thought]")
+    out.append(_extract_text(response) or "(no text in response)")
+    return "\n".join(out)
+
+
+def ask(question, model=MODEL, max_tokens=4096, show_thinking=True):
     """Send ONE question to a real Claude model with live web search enabled,
-    no memory of anything before it. Returns the answer text, or a clear
-    error string — never fake data."""
+    no memory of anything before it. Returns the formatted answer (with a
+    real [thinking]...[thought] section if show_thinking), or a clear error
+    string — never fake data."""
     import anthropic
     client, err = _client_or_error()
     if err:
@@ -67,6 +96,7 @@ def ask(question, model=MODEL, max_tokens=2048):
         response = client.messages.create(
             model=model,
             max_tokens=max_tokens,
+            thinking={"type": "adaptive", "display": "summarized"},
             tools=[{"type": "web_search_20260209", "name": "web_search"}],
             messages=[{"role": "user", "content": question}],
         )
@@ -79,16 +109,20 @@ def ask(question, model=MODEL, max_tokens=2048):
 
     if response.stop_reason == "refusal":
         return "Claude declined to answer this request."
-    return _extract_text(response) or "(no text in response — check response.content directly)"
+    return _format_reply(response, show_thinking)
 
 
-def chat(model=MODEL, max_tokens=2048):
+def chat(model=MODEL, max_tokens=4096, show_thinking=True):
     """A REAL back-and-forth conversation with Claude — this is what actually
     'talking like me' means: not a bigger/longer-trained checkpoint (that
     structurally cannot become a conversational assistant — see this file's
     docstring), but a live connection to a real, already-trained assistant.
     Keeps the whole conversation history and resends it each turn, same as
-    any real chat app does — the API itself has no memory between calls."""
+    any real chat app does — the API itself has no memory between calls.
+
+    show_thinking prints Claude's REAL reasoning as [thinking] ... [thought]
+    before the answer, using the API's actual extended-thinking feature
+    (a genuine summary of real reasoning, never a fabricated placeholder)."""
     import anthropic
     client, err = _client_or_error()
     if err:
@@ -112,6 +146,7 @@ def chat(model=MODEL, max_tokens=2048):
             response = client.messages.create(
                 model=model,
                 max_tokens=max_tokens,
+                thinking={"type": "adaptive", "display": "summarized"},
                 tools=[{"type": "web_search_20260209", "name": "web_search"}],
                 messages=messages,
             )
@@ -133,9 +168,9 @@ def chat(model=MODEL, max_tokens=2048):
             messages.pop()
             continue
 
-        text = _extract_text(response)
-        print(f"\nclaude> {text}\n")
-        # keep the real reply in history so it remembers this conversation
+        print(f"\nclaude> {_format_reply(response, show_thinking)}\n")
+        # keep the FULL response (including thinking blocks) in history --
+        # required so Claude can correctly continue reasoning next turn
         messages.append({"role": "assistant", "content": response.content})
 
 
@@ -152,8 +187,11 @@ def looks_like_needs_real_ai(text):
 
 
 if __name__ == "__main__":
+    show_thinking = "--no-thinking" not in sys.argv
+    args = [a for a in sys.argv[1:] if a not in ("--chat", "--no-thinking")]
+
     if "--chat" in sys.argv:
-        chat()
+        chat(show_thinking=show_thinking)
     else:
-        question = " ".join(sys.argv[1:]) or input("question> ")
-        print(ask(question))
+        question = " ".join(args) or input("question> ")
+        print(ask(question, show_thinking=show_thinking))
