@@ -291,6 +291,24 @@ model structurally can't know something, hand off instead of letting it guess:
   current info gets routed here, clearly labeled as a real-AI answer, never
   the trained model guessing.
 
+### If you want it to actually talk like a real assistant
+
+The trained model in this repo can never become a conversational AI, no
+matter how long you train it — it was only ever taught to continue text,
+never to hold a conversation (that needs a whole separate training phase —
+instruction-tuning — that a hobby-scale model can't meaningfully do). The
+honest, real way to get that experience is `ask_claude.py`'s chat mode: a
+genuine live connection to Claude, with real conversation memory:
+
+```bash
+python ask_claude.py --chat
+```
+
+This is a fundamentally different thing from everything else in this repo:
+it's not model.py getting smarter, it's a real, already-trained assistant
+you're talking to directly, the same way you'd use Claude anywhere else.
+Needs `ANTHROPIC_API_KEY` set, same as above.
+
 ## Blender and Unreal Engine — real geometry, honestly built
 
 `content_commands.py`, `blender_bridge.py`, and `unreal_bridge.py` let you
