@@ -309,6 +309,18 @@ it's not model.py getting smarter, it's a real, already-trained assistant
 you're talking to directly, the same way you'd use Claude anywhere else.
 Needs `ANTHROPIC_API_KEY` set, same as above.
 
+By default every reply shows Claude's REAL reasoning first (the API's actual
+extended-thinking feature, summarized — never fabricated), in exactly this
+shape:
+
+```
+you> hi
+claude> [thinking] The user just greeted me casually... [thought]
+hi! how are you? how can I help you today?
+```
+
+Turn it off with `python ask_claude.py --chat --no-thinking`.
+
 ## Blender and Unreal Engine — real geometry, honestly built
 
 `content_commands.py`, `blender_bridge.py`, and `unreal_bridge.py` let you
