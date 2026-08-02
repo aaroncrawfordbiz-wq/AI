@@ -167,6 +167,15 @@ BOOK_URLS = {
     "secretgarden": "https://raw.githubusercontent.com/GITenberg/The-Secret-Garden_113/master/113.txt",
 }
 
+# Real, full public-domain books on business strategy, pricing, and
+# competitive markets — teaches business-style vocabulary and tone. (Style
+# only, same as everything else here: it will learn to SOUND like business
+# writing, not to actually analyze a market or price a product.)
+BUSINESS_URLS = {
+    "mylifeandwork": "https://raw.githubusercontent.com/GITenberg/My-Life-and-Work_7213/master/7213.txt",
+    "artofwar": "https://raw.githubusercontent.com/GITenberg/The-Art-of-War_132/master/132.txt",
+}
+
 
 def fetch(url):
     print(f"  downloading {url}")
@@ -196,6 +205,8 @@ def get_dataset(name, url=None):
         text = fetch_language("python")
     elif name == "library":
         return get_library()
+    elif name == "business":
+        return get_business()
     elif name == "everything":
         return get_everything()
     elif name == "polyglot":
@@ -250,6 +261,22 @@ def get_everything():
     return path
 
 
+def get_business():
+    """Real public-domain business/strategy books — teaches business-style
+    writing tone and vocabulary (NOT real market data or analysis)."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    path = os.path.join(DATA_DIR, "business.txt")
+    if os.path.exists(path):
+        print(f"already downloaded: {path}")
+        return path
+    parts = [fetch(u) for u in BUSINESS_URLS.values()]
+    text = "\n\n".join(parts)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"saved {len(text):,} characters ({len(BUSINESS_URLS)} books) to {path}")
+    return path
+
+
 def get_polyglot(langs=None):
     """Download several languages and concatenate them into one training
     file, each labeled, so one model can learn every language's style."""
@@ -297,6 +324,8 @@ if __name__ == "__main__":
         get_polyglot(sys.argv[2:] or None)
     elif cmd == "library":
         get_library()
+    elif cmd == "business":
+        get_business()
     elif cmd == "everything":
         get_everything()
     else:

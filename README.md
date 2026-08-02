@@ -215,6 +215,69 @@ and the reason big labs ALSO train models to refuse (rather than only
 filtering) is exactly the weakness you can spot here: a word filter can't
 judge meaning, only spelling.
 
+## Real math (a calculator tool, not the neural net guessing)
+
+The trained model cannot do arithmetic — it never learned numbers, only
+which digits tend to follow others in text. `calculator.py` is a real,
+exact calculator (Python's own math, safely sandboxed to plain `+ - * / **`
+— no code execution possible) that answers instead of the model whenever it
+detects a math question:
+
+```
+python generate.py --model checkpoints/shakespeare.npz --interactive
+you> what is 47 * 83
+(calculator, not the model): 47 * 83 = 3901
+```
+
+This is the real version of "can it do math" — not training it harder, but
+giving it an actual tool and having plain code decide when to use it. This
+is also literally how real AI products handle math.
+
+## Business/marketing text (style only)
+
+```bash
+python download_data.py business   # My Life and Work (Ford) + The Art of War
+python train.py --data data/business.txt
+```
+
+Same rule as everywhere else in this project: it learns the *tone and
+vocabulary* of business writing, not real facts. It cannot tell you what a
+market is doing, price anything, or run analysis — it has no access to
+real data and no ability to reason about numbers (see the calculator above
+for the one place real computation is possible). Training on this text
+teaches it to *sound* like a business book, nothing more.
+
+## Blender and Unreal Engine — real geometry, honestly built
+
+`content_commands.py`, `blender_bridge.py`, and `unreal_bridge.py` let you
+type `"red cube at 2 0 1 size 1.5"` and get a real object placed in a real
+Blender scene or Unreal level.
+
+**Read this before trying it:** the object is created by an exact,
+ordinary keyword parser — **not** by the trained neural network. This is a
+deliberate, honest design choice, not a shortcut: the README's own
+generated samples throughout this project prove model.py produces
+code-*shaped* text that doesn't run. Handing 3D creation to it would mean
+wrong shapes in wrong places with no way to know until you looked. A real
+parser is what actually, reliably works — the same "language model decides
+intent, exact code executes it" split used by every real product that
+combines AI with precise output. There is no version of "the AI designs
+AAA content" that this scale of model can honestly do; that requires a
+completely different kind of AI (3D-generation networks trained on 3D
+datasets), not a bigger version of this text model.
+
+```bash
+# test without owning Blender/Unreal at all:
+python blender_bridge.py --dry-run "red cube at -2 0 0; blue sphere at 0 0 0 size 1.2"
+python unreal_bridge.py --dry-run "red cube at -200 0 0 size 100"
+```
+
+Each file's docstring has exact steps to run it for real inside Blender's
+Scripting tab or Unreal's Python console. Optionally, `blender_bridge.py`
+can ask a trained checkpoint for a short flavor-text caption of the scene
+(`caption_scene()`) — clearly cosmetic, never parsed back into commands,
+never controlling anything.
+
 ## What's in the files
 
 | File | What it is |
@@ -224,6 +287,10 @@ judge meaning, only spelling.
 | `generate.py` | Load a trained brain and generate from a prompt (or `--interactive`) |
 | `download_data.py` | Internet access: fetches training data from the web |
 | `banned_words.txt` | The boundary: words it is never allowed to say |
+| `calculator.py` | A real calculator tool — used INSTEAD of the model for math |
+| `content_commands.py` | Exact parser: text like "red cube at 0 0 0" -> a structured action |
+| `blender_bridge.py` | Builds real objects in Blender from parsed commands |
+| `unreal_bridge.py` | Spawns real actors in Unreal Engine from parsed commands |
 | `tokenizer.py` | Text ↔ numbers (character-level) |
 | `test_model.py` | Proof of correctness: checks backprop against brute-force calculus |
 
