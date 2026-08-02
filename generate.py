@@ -19,6 +19,7 @@ import sys
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 
+from ask_claude import ask, looks_like_needs_real_ai
 from calculator import calculate, looks_like_math
 from model import load_checkpoint
 from tokenizer import CharTokenizer
@@ -106,7 +107,9 @@ def main():
     if args.interactive:
         print("type a prompt and the model continues it (ctrl-c to quit)")
         print("real arithmetic like '47 * 83' is answered by an actual "
-              "calculator, not the model — see calculator.py\n")
+              "calculator, not the model — see calculator.py")
+        print("questions needing CURRENT info (prices, news, 'right now') "
+              "are sent to a real AI with live web search — see ask_claude.py\n")
         while True:
             try:
                 prompt = input("you> ")
@@ -119,6 +122,12 @@ def main():
                     print(f"(calculator, not the model): {expr} = {calculate(expr)}")
                 except (ValueError, ZeroDivisionError, SyntaxError) as e:
                     print(f"(calculator couldn't parse that: {e})")
+                print()
+                continue
+            if looks_like_needs_real_ai(prompt):
+                print("(asking a real AI, not the trained model — this needs "
+                      "current information a saved checkpoint can't have)")
+                print(ask(prompt))
                 print()
                 continue
             run(model, tok, prompt, args.tokens, args.temperature, args.top_k,

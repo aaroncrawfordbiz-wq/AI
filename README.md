@@ -268,6 +268,29 @@ real data and no ability to reason about numbers (see the calculator above
 for the one place real computation is possible). Training on this text
 teaches it to *sound* like a business book, nothing more.
 
+This is meant to be trained as its **own checkpoint**, separate from your
+Shakespeare or code brains (`--out checkpoints/business`) — one model per
+topic, so teaching it business writing never dilutes what the Shakespeare
+brain already learned, and vice versa.
+
+## Real, live market data and a real AI on demand
+
+Two more real tools, same rule as the calculator above — when the trained
+model structurally can't know something, hand off instead of letting it guess:
+
+- **`market_lookup.py`** — real live crypto prices (CoinGecko), currency
+  exchange rates (Frankfurter/ECB), and stock quotes (Alpha Vantage, needs
+  a free key from their site). No trained checkpoint can ever be "current,"
+  no matter how it's trained — this skips the model and calls real data at
+  the moment you ask: `python market_lookup.py "price of bitcoin"`.
+- **`ask_claude.py`** — hands genuinely current-info questions ("what's
+  happening with X right now") to the real Claude API with live web search.
+  `pip install anthropic`, set `ANTHROPIC_API_KEY`, then
+  `python ask_claude.py "..."`. Wired automatically into
+  `generate.py --interactive` alongside the calculator — a question needing
+  current info gets routed here, clearly labeled as a real-AI answer, never
+  the trained model guessing.
+
 ## Blender and Unreal Engine — real geometry, honestly built
 
 `content_commands.py`, `blender_bridge.py`, and `unreal_bridge.py` let you
@@ -356,6 +379,8 @@ python blender_mcp_server.py --selftest
 | `download_data.py` | Internet access: fetches training data from the web |
 | `banned_words.txt` | The boundary: words it is never allowed to say |
 | `calculator.py` | A real calculator tool — used INSTEAD of the model for math |
+| `market_lookup.py` | Real live crypto/forex/stock data — used INSTEAD of the model |
+| `ask_claude.py` | Hands current-info questions to a real AI (Claude), not the trained model |
 | `code_checker.py` | Real syntax checkers (Python/JS/C/C++) — the model never checks itself |
 | `self_check_generate.py` | Generate -> really check -> retry loop, with real pass/fail proof |
 | `content_commands.py` | Exact parser: text like "red cube at 0 0 0" -> a structured action |
