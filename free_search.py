@@ -33,14 +33,41 @@ READ THIS — the honest ceiling, and why ask_claude.py still exists:
   work with normal internet access; if DuckDuckGo changes their page
   layout in the future, the regex patterns below may need updating.
 
+REAL BROWSER MODE (the fix for exactly that problem): search engines
+change their page layout, which breaks any parser tied to specific CSS
+class names — that's what happened above. Browser mode sidesteps this by
+opening a REAL browser (Safari, already on every Mac — no download) and
+reading whatever text is actually rendered on screen, instead of guessing
+at HTML tags. This is far more robust to layout changes, because it works
+off visible text, not markup.
+
+One-time setup for Safari (no extra software to install):
+  1. Safari menu -> Settings -> Advanced tab -> check
+     "Show features for web developers"
+  2. The "Develop" menu now appears in the menu bar -> click it ->
+     check "Allow Remote Automation"
+  3. pip3 install selenium
+
 Usage:
-  python free_search.py "population of japan"
+  python free_search.py                        # opens a "you>" chat loop
+  python free_search.py "population of japan"   # one question
+  python free_search.py --chrome                # use Chrome instead of Safari
+                                                  # (needs Chrome + chromedriver)
+
+IMPORTANT — this environment has neither macOS nor Safari nor internet
+access to search engines, so the browser-automation path could not be run
+live here either. It's written to Selenium's real, documented WebDriver
+API and Apple's documented Safari automation setup — it should work as
+written on your actual Mac. If it doesn't, the error message will name
+the real problem (Selenium missing, Safari automation not enabled, etc.)
+rather than fail silently.
 """
 
 import difflib
 import html
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -172,6 +199,117 @@ def answer(query, num_results=5):
     return f"{snippet}\n\n(matched across {len(supporters)} source(s): {sources})"
 
 
+# ---------------------------------------------------------------------------
+# Real browser mode -- reads whatever a real browser actually renders,
+# instead of guessing at a search engine's HTML tag names (which is exactly
+# what broke above when DuckDuckGo changed their page layout).
+# ---------------------------------------------------------------------------
+
+def _launch_browser(engine="safari"):
+    """Starts a REAL browser under your control via Selenium's WebDriver
+    protocol -- the same technology behind real browser automation and
+    testing tools. Returns (driver, None) or (None, error_string)."""
+    try:
+        from selenium import webdriver
+    except ImportError:
+        return None, "error: selenium isn't installed — run: pip3 install selenium"
+
+    try:
+        if engine == "safari":
+            driver = webdriver.Safari()
+        elif engine == "chrome":
+            driver = webdriver.Chrome()
+        else:
+            return None, f"error: unknown engine '{engine}' — use 'safari' or 'chrome'"
+    except Exception as e:
+        hint = ""
+        if engine == "safari":
+            hint = (" — on your Mac: Safari > Settings > Advanced > check "
+                   "'Show features for web developers', then the new "
+                   "'Develop' menu > check 'Allow Remote Automation' "
+                   "(one-time setup, see this file's docstring)")
+        return None, f"error: couldn't start {engine} ({e}){hint}"
+    return driver, None
+
+
+def fetch_page_text(query, engine="safari", timeout=20):
+    """Opens a real browser, navigates to a real search results page, and
+    returns the actual VISIBLE TEXT of that page -- exactly what a human
+    looking at the screen would see. Unlike raw HTML scraping, this
+    survives the search engine changing their markup, because it never
+    looks at tag names or CSS classes at all."""
+    driver, err = _launch_browser(engine)
+    if err:
+        return None, err
+    try:
+        url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query)
+        driver.set_page_load_timeout(timeout)
+        driver.get(url)
+        time.sleep(2)  # let the page finish rendering
+        body_text = driver.find_element("tag name", "body").text
+        return body_text, None
+    except Exception as e:
+        return None, f"error: browser navigation failed ({e})"
+    finally:
+        driver.quit()
+
+
+def _candidate_lines(body_text, min_len=25, max_len=400):
+    """Search-result pages render as many short lines of text (nav links,
+    menus, ads) plus the actual result snippets. Keep only lines in a
+    plausible 'real sentence' length range -- crude, but it doesn't depend
+    on any specific site's markup, so it survives layout changes."""
+    lines = [ln.strip() for ln in body_text.splitlines()]
+    return [ln for ln in lines if min_len <= len(ln) <= max_len]
+
+
+def answer_via_browser(query, engine="safari"):
+    """The browser-mode pipeline: real browser -> real rendered text ->
+    same honest agreement check as answer() above. Never fabricates a
+    result — says so plainly when nothing lines up."""
+    body_text, err = fetch_page_text(query, engine)
+    if err:
+        return err
+
+    lines = _candidate_lines(body_text)
+    if not lines:
+        return "no usable text came back from the page — try rephrasing the question"
+
+    # reuse the exact same agreement logic as the non-browser path, just
+    # labeling each candidate line as its own numbered "result"
+    labeled = [(f"result {i + 1}", line) for i, line in enumerate(lines)]
+    snippet, supporters = find_agreement(labeled)
+    if snippet is None:
+        return ("no confident answer — nothing on the results page agreed "
+               "closely enough. Try ask_claude.py for a real AI's actual "
+               "understanding instead of raw text-matching.")
+    return f"{snippet}\n\n(this appeared, in agreement, {len(supporters)} times on the results page)"
+
+
+def repl(engine="safari"):
+    """A persistent 'you>' chat loop, so you never have to retype the
+    command — just run 'python free_search.py' with no arguments."""
+    print(f"free web search ({engine}, real browser, no API key, no "
+          f"account) — ctrl-c to quit\n")
+    while True:
+        try:
+            query = input("you> ")
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return
+        if not query.strip():
+            continue
+        print()
+        print(answer_via_browser(query, engine))
+        print()
+
+
 if __name__ == "__main__":
-    query = " ".join(sys.argv[1:]) or input("search> ")
-    print(answer(query))
+    args = sys.argv[1:]
+    engine = "chrome" if "--chrome" in args else "safari"
+    args = [a for a in args if a not in ("--chrome", "--safari")]
+
+    if args:
+        print(answer_via_browser(" ".join(args), engine))
+    else:
+        repl(engine)

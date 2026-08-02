@@ -304,7 +304,22 @@ tested against exactly that failure case in `test_free_search.py`). No
 match found → it says so honestly instead of guessing.
 
 ```bash
-python free_search.py "population of japan"
+python free_search.py                          # opens a "you>" chat loop
+python free_search.py "population of japan"    # or ask one question directly
+```
+
+**Default mode (`fetch_results`/`answer`) scrapes raw HTML — fragile, since
+search engines change their page layout and break it (this happened during
+testing).** For that reason, **real browser mode is what's actually wired
+into `generate.py`** — it opens a genuine browser (Safari, already on your
+Mac, no download needed) and reads whatever text is actually rendered on
+screen, which survives layout changes since it never depends on specific
+HTML tags. One-time setup, no extra software besides one package:
+
+```bash
+pip install selenium
+# then in Safari: Settings > Advanced > check "Show features for web
+# developers" -> a new "Develop" menu appears -> check "Allow Remote Automation"
 ```
 
 **The honest ceiling, and it's a real one:** this has zero understanding —

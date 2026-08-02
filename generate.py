@@ -21,7 +21,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 from ask_claude import ask, looks_like_needs_real_ai
 from calculator import calculate, looks_like_math
-from free_search import answer as free_search_answer
+from free_search import answer_via_browser as free_search_answer
 from model import load_checkpoint
 from tokenizer import CharTokenizer
 
