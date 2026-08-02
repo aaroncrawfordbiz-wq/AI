@@ -22,8 +22,40 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 from model import load_checkpoint
 from tokenizer import CharTokenizer
 
+BASE = os.path.dirname(os.path.abspath(__file__))
 
-def run(model, tok, prompt, tokens, temperature, top_k):
+
+def load_banned_words(path):
+    """Read the boundary list: one word per line, # lines are comments."""
+    if not path or not os.path.exists(path):
+        return []
+    words = []
+    for line in open(path, encoding="utf-8"):
+        w = line.strip().lower()
+        if w and not w.startswith("#"):
+            words.append(w)
+    return words
+
+
+def make_guard(tok, banned):
+    """Build the boundary: vetoes any character that would complete a banned
+    word. Checked BEFORE each character is shown, so a banned word can never
+    appear — the model is forced to choose different words instead."""
+    def guard(ids, nxt):
+        tail = tok.decode(ids[-40:] + [nxt]).lower()
+        for w in banned:
+            if tail.endswith(w):
+                start = len(tail) - len(w)
+                # only block a real word start ("class" is fine even if
+                # "ass" is banned), but blocking word ENDINGS must be
+                # strict, since the rest of the word hasn't been written yet
+                if start == 0 or not tail[start - 1].isalpha():
+                    return False
+        return True
+    return guard
+
+
+def run(model, tok, prompt, tokens, temperature, top_k, guard=None):
     known = sum(c in tok.ctoi for c in prompt)
     if known < len(prompt):
         print(f"(note: {len(prompt) - known} character(s) of your prompt "
@@ -34,6 +66,7 @@ def run(model, tok, prompt, tokens, temperature, top_k):
     sys.stdout.write(prompt)
     sys.stdout.flush()
     model.generate(ids, tokens, temperature=temperature, top_k=top_k,
+                   guard=guard,
                    stream=lambda i: (sys.stdout.write(tok.decode([i])),
                                      sys.stdout.flush()))
     print()
@@ -49,6 +82,9 @@ def main():
     p.add_argument("--top_k", type=int, default=40)
     p.add_argument("--interactive", action="store_true",
                    help="keep prompting it in a loop")
+    p.add_argument("--banned", default=os.path.join(BASE, "banned_words.txt"),
+                   help="boundary file of words it may never say "
+                        "(default: banned_words.txt; use --banned '' to disable)")
     args = p.parse_args()
 
     if not os.path.exists(args.model):
@@ -57,7 +93,14 @@ def main():
     model, chars = load_checkpoint(args.model)
     tok = CharTokenizer(chars)
     print(f"loaded {args.model}: {model.num_params():,} parameters, "
-          f"vocab {tok.vocab_size}\n")
+          f"vocab {tok.vocab_size}")
+
+    banned = load_banned_words(args.banned)
+    guard = make_guard(tok, banned) if banned else None
+    if banned:
+        print(f"boundary active: {len(banned)} banned word(s) it can never say "
+              f"(edit {args.banned} to change)")
+    print()
 
     if args.interactive:
         print("type a prompt and the model continues it (ctrl-c to quit)\n")
@@ -67,10 +110,12 @@ def main():
             except (KeyboardInterrupt, EOFError):
                 print()
                 break
-            run(model, tok, prompt, args.tokens, args.temperature, args.top_k)
+            run(model, tok, prompt, args.tokens, args.temperature, args.top_k,
+                guard)
             print()
     else:
-        run(model, tok, args.prompt, args.tokens, args.temperature, args.top_k)
+        run(model, tok, args.prompt, args.tokens, args.temperature, args.top_k,
+            guard)
 
 
 if __name__ == "__main__":

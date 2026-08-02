@@ -1,0 +1,13 @@
+# Boundary list: the model is never allowed to write these words.
+# One word per line. Lines starting with # are comments and are ignored.
+# Matching ignores UPPER/lower case.
+#
+# Add any words you don't want it to say — curse words, names, anything.
+#
+# One thing to know: banning a word also blocks longer words that START
+# with it (banning "hell" also blocks "hello"), so ban the most specific
+# form you can.
+#
+# A couple of mild examples to show it works — edit this list freely:
+damn
+crap

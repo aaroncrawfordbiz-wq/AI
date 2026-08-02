@@ -275,8 +275,14 @@ class GPT:
             pairs += blk.params_and_grads()
         return pairs + self.ln_f.params_and_grads() + self.head.params_and_grads()
 
-    def generate(self, ids, n_tokens, temperature=0.8, top_k=40, stream=None):
-        """Autoregression — the GPT loop: predict, sample, append, repeat."""
+    def generate(self, ids, n_tokens, temperature=0.8, top_k=40, stream=None,
+                 guard=None):
+        """Autoregression — the GPT loop: predict, sample, append, repeat.
+
+        guard: optional boundary function guard(ids_so_far, next_id) -> bool.
+        If it returns False, that character choice is vetoed BEFORE being
+        emitted and the model must pick a different one — a miniature version
+        of the output guardrails real AI systems use."""
         ids = list(ids)
         out = []
         for _ in range(n_tokens):
@@ -290,6 +296,14 @@ class GPT:
             p = np.exp(z)
             p /= p.sum()
             nxt = int(rng.choice(len(p), p=p))
+            if guard is not None:
+                while not guard(ids, nxt):
+                    p[nxt] = 0.0            # veto it and resample the rest
+                    if p.sum() <= 0:        # nothing allowed — bail out safely
+                        nxt = 0
+                        break
+                    p /= p.sum()
+                    nxt = int(rng.choice(len(p), p=p))
             ids.append(nxt)
             out.append(nxt)
             if stream:

@@ -112,6 +112,33 @@ text full of characters it has never seen, those get skipped (the trainer
 warns you). For very different text, train a fresh brain on a combined file
 instead.
 
+## Setting boundaries (words it's not allowed to say)
+
+The model has no idea any word is "bad" — it can only say what was in its
+training text, and if you feed it text with cursing in it, cursing can come
+back out. Real AI systems handle this with two layers, and so does this one:
+
+1. **Curate the diet.** The first boundary is choosing training data. The
+   built-in datasets are tame; if you don't want a kind of language coming
+   out, don't train it on text that contains it.
+2. **The boundary file.** `banned_words.txt` lists words the model is never
+   allowed to write — one per line, edit it freely. During generation, any
+   character that would complete a banned word is vetoed *before it's shown*
+   and the model is forced to pick different words. The block is absolute:
+   banned words cannot appear, in any letter case.
+
+```bash
+# on by default; point at your own list, or '' to turn off
+python generate.py --model checkpoints/shakespeare.npz --banned my_rules.txt
+```
+
+One quirk to know: banning a word also blocks longer words that *start* with
+it (banning "hell" also blocks "hello"), so ban the most specific form you
+can. This filter is a miniature of the "guardrails" real AI products use —
+and the reason big labs ALSO train models to refuse (rather than only
+filtering) is exactly the weakness you can spot here: a word filter can't
+judge meaning, only spelling.
+
 ## What's in the files
 
 | File | What it is |
@@ -120,6 +147,7 @@ instead.
 | `train.py` | The training loop: data → loss → gradients → nudge, repeat |
 | `generate.py` | Load a trained brain and generate from a prompt (or `--interactive`) |
 | `download_data.py` | Internet access: fetches training data from the web |
+| `banned_words.txt` | The boundary: words it is never allowed to say |
 | `tokenizer.py` | Text ↔ numbers (character-level) |
 | `test_model.py` | Proof of correctness: checks backprop against brute-force calculus |
 
