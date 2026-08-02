@@ -291,6 +291,30 @@ model structurally can't know something, hand off instead of letting it guess:
   current info gets routed here, clearly labeled as a real-AI answer, never
   the trained model guessing.
 
+## Free, no-API-key web answers (`free_search.py`)
+
+If you don't have an `ANTHROPIC_API_KEY` set, `generate.py --interactive`
+automatically falls back to this instead — genuinely free, no account, no
+key. It does exactly what it sounds like: searches the web for your
+question, pulls the top 5 results, and only answers when **several results
+actually agree** — including checking that any numbers they state actually
+match, not just that the wording sounds similar (an early version of this
+tool got fooled by an outdated figure with similar phrasing; this is now
+tested against exactly that failure case in `test_free_search.py`). No
+match found → it says so honestly instead of guessing.
+
+```bash
+python free_search.py "population of japan"
+```
+
+**The honest ceiling, and it's a real one:** this has zero understanding —
+it's comparing chunks of text for overlap, nothing more. It only works for
+short factual questions search engines already answer well. It cannot
+converse, reason, write code, or answer "why"/opinion questions. For
+anything needing real comprehension, `ask_claude.py` (which costs a little
+money per question) is doing something genuinely different — this is the
+free-but-limited alternative, not a replacement for it.
+
 ### If you want it to actually talk like a real assistant
 
 The trained model in this repo can never become a conversational AI, no
@@ -409,6 +433,7 @@ python blender_mcp_server.py --selftest
 | `download_data.py` | Internet access: fetches training data from the web |
 | `banned_words.txt` | The boundary: words it is never allowed to say |
 | `calculator.py` | A real calculator tool — used INSTEAD of the model for math |
+| `free_search.py` | Free, no-API-key web search-and-agreement answering |
 | `market_lookup.py` | Real live crypto/forex/stock data — used INSTEAD of the model |
 | `ask_claude.py` | Hands current-info questions to a real AI (Claude), not the trained model |
 | `code_checker.py` | Real syntax checkers (Python/JS/C/C++) — the model never checks itself |

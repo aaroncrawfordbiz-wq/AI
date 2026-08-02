@@ -21,6 +21,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 from ask_claude import ask, looks_like_needs_real_ai
 from calculator import calculate, looks_like_math
+from free_search import answer as free_search_answer
 from model import load_checkpoint
 from tokenizer import CharTokenizer
 
@@ -125,9 +126,17 @@ def main():
                 print()
                 continue
             if looks_like_needs_real_ai(prompt):
-                print("(asking a real AI, not the trained model — this needs "
-                      "current information a saved checkpoint can't have)")
-                print(ask(prompt))
+                has_key = bool(os.environ.get("ANTHROPIC_API_KEY")
+                              or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+                if has_key:
+                    print("(asking a real AI, not the trained model — this "
+                          "needs current information a saved checkpoint can't have)")
+                    print(ask(prompt))
+                else:
+                    print("(no ANTHROPIC_API_KEY set — falling back to a free, "
+                          "no-key web search instead. Less capable than a real "
+                          "AI, but genuinely free — see free_search.py)")
+                    print(free_search_answer(prompt))
                 print()
                 continue
             run(model, tok, prompt, args.tokens, args.temperature, args.top_k,
