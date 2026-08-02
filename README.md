@@ -215,6 +215,27 @@ and the reason big labs ALSO train models to refuse (rather than only
 filtering) is exactly the weakness you can spot here: a word filter can't
 judge meaning, only spelling.
 
+## Self-checking code generation (a real checker, not the model judging itself)
+
+The model can't tell good code from broken code — it never understood what
+code *does*. But a REAL checker can, so `self_check_generate.py` generates
+code, actually runs it through the real tool for that language (Python's
+own compiler, `node`, `gcc`), and if it fails, resamples and tries again:
+
+```bash
+python self_check_generate.py --model checkpoints/code.npz --prompt "def " --lang python --max-attempts 15
+```
+
+**Read this before expecting too much:** it verifies SYNTAX only — "is
+this valid, parseable code" — never whether the code does what you asked.
+More attempts make it more likely to stumble into something that merely
+parses; they do not make it understand your request, because retrying
+doesn't add understanding it never had. Proven both ways in testing: it
+correctly PASSES easy, short targets and correctly EXHAUSTS every attempt
+on harder ones, always reporting the real checker's error — never a fake
+success. That gap (verified-parseable vs. actually-correct) is the honest
+line this project's scale can reach, and no amount of retrying moves it.
+
 ## Real math (a calculator tool, not the neural net guessing)
 
 The trained model cannot do arithmetic — it never learned numbers, only
@@ -335,6 +356,8 @@ python blender_mcp_server.py --selftest
 | `download_data.py` | Internet access: fetches training data from the web |
 | `banned_words.txt` | The boundary: words it is never allowed to say |
 | `calculator.py` | A real calculator tool — used INSTEAD of the model for math |
+| `code_checker.py` | Real syntax checkers (Python/JS/C/C++) — the model never checks itself |
+| `self_check_generate.py` | Generate -> really check -> retry loop, with real pass/fail proof |
 | `content_commands.py` | Exact parser: text like "red cube at 0 0 0" -> a structured action |
 | `blender_bridge.py` | Builds real objects in Blender from parsed commands |
 | `unreal_bridge.py` | Spawns real actors in Unreal Engine from parsed commands |
