@@ -78,6 +78,46 @@ python train.py --dataset code          # real Python stdlib source, ~10-15 min
 python generate.py --model checkpoints/code.npz --prompt "def " --tokens 400
 ```
 
+### 27 languages
+
+`download_data.py` can fetch real source code in any of these languages —
+list them any time with `python download_data.py languages`:
+
+```
+bash        c           cpp         csharp      gdscript    glsl
+go          hlsl        java        javascript  julia       kotlin
+lua         matlab      micropython perl        php         powershell
+python      r           ruby        rust        scala       shell
+swift       typescript  wgsl
+```
+
+Train on just one:
+
+```bash
+python download_data.py lang rust
+python train.py --data data/lang_rust.txt --out checkpoints/rust
+python generate.py --model checkpoints/rust.npz --prompt "fn "
+```
+
+Or build a **polyglot** brain that learns several languages at once — your
+prompt's opening characters steer which language it continues in (`def ` →
+Python, `func ` → Go, `fn ` → Rust):
+
+```bash
+python download_data.py polyglot python rust go lua csharp   # pick any subset
+# or every language at once:
+python download_data.py polyglot
+
+python train.py --data data/polyglot_python_rust_go_lua_csharp.txt \
+                 --layers 6 --emb 192 --steps 30000 --out checkpoints/poly
+
+python generate.py --model checkpoints/poly.npz --prompt "public class "
+```
+
+More languages sharing one small brain means each gets less "room," so a
+polyglot model benefits even more from the bigger `--layers`/`--emb`/
+`--steps` settings under "Make it smarter" below.
+
 ## Train it on ANYTHING
 
 Any text file, or any text URL on the internet:
