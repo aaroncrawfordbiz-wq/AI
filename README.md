@@ -278,6 +278,53 @@ can ask a trained checkpoint for a short flavor-text caption of the scene
 (`caption_scene()`) — clearly cosmetic, never parsed back into commands,
 never controlling anything.
 
+### Talk to Blender in plain English, via MCP
+
+There IS a real way to say "build a small red house" in ordinary language
+and have Blender build it correctly — just not by making the from-scratch
+model in this repo smarter. The trick is [MCP](https://modelcontextprotocol.io)
+(Model Context Protocol): it lets a genuinely capable AI — Claude Desktop,
+Claude Code, or any MCP client — call Blender-building functions by name.
+The big model's real job (understanding "a small red house" and breaking it
+into shape commands) is something large language models are actually good
+at; the exact building is still done by `content_commands.py`'s ordinary
+parser, same as above. Three pieces, verified working together end to end
+in this repo (including a live test over the real MCP protocol):
+
+```
+  You, in Claude Desktop         The big AI calls           Blender, actually
+  or Claude Code, in     --->    build_shapes(...)   --->   building the
+  plain English                  over MCP                   real object
+                                       |
+                          blender_addon_server.py's HTTP API
+                          (a small server running INSIDE Blender)
+```
+
+Setup:
+
+```bash
+pip install "mcp>=1.6,<2"
+```
+
+1. Open Blender -> Scripting tab -> open `blender_addon_server.py` -> Run
+   Script. Leave Blender open (see that file's docstring for details).
+2. Add `blender_mcp_server.py` to your AI client's MCP config — for Claude
+   Desktop, in `claude_desktop_config.json`:
+   ```json
+   { "mcpServers": { "blender": {
+       "command": "python", "args": ["/full/path/to/blender_mcp_server.py"]
+   } } }
+   ```
+3. Restart the client, then just ask in plain English: *"build a small red
+   house out of cubes"* — the AI figures out the shape commands and calls
+   the tool; Blender builds the real geometry.
+
+Test the whole chain without Blender or an AI client at all:
+```bash
+python blender_addon_server.py --dry-run &
+python blender_mcp_server.py --selftest
+```
+
 ## What's in the files
 
 | File | What it is |
@@ -291,6 +338,8 @@ never controlling anything.
 | `content_commands.py` | Exact parser: text like "red cube at 0 0 0" -> a structured action |
 | `blender_bridge.py` | Builds real objects in Blender from parsed commands |
 | `unreal_bridge.py` | Spawns real actors in Unreal Engine from parsed commands |
+| `blender_addon_server.py` | Runs inside Blender; lets an outside process request builds |
+| `blender_mcp_server.py` | MCP server: lets a real AI (not model.py) call Blender by name |
 | `tokenizer.py` | Text ↔ numbers (character-level) |
 | `test_model.py` | Proof of correctness: checks backprop against brute-force calculus |
 
